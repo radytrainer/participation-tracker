@@ -38,7 +38,7 @@ function ScoreBtn({ value, selected, onChange }) {
       title={SCORE_LABELS[value]}
       onClick={() => onChange(value === selected ? null : value)}
       className={clsx(
-        'w-6 h-6 rounded text-xs font-bold border transition-all duration-100 select-none',
+        'w-7 h-7 rounded-full text-xs font-bold border transition-all duration-100 select-none',
         selected === value
           ? c.active
           : `bg-white dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-600 ${c.hover}`
@@ -568,7 +568,7 @@ export default function Participation() {
               {[0,1,2,3,4].map((v) => (
                 <span key={v} className="flex items-center gap-1">
                   <span className={clsx(
-                    'inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold text-white',
+                    'inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold text-white',
                     v === 0 ? 'bg-red-500' : v === 1 ? 'bg-orange-400' : v === 2 ? 'bg-amber-400' : v === 3 ? 'bg-blue-500' : 'bg-emerald-500'
                   )}>{v}</span>
                   <span>{SCORE_LABELS[v].split(' ')[0]}</span>
