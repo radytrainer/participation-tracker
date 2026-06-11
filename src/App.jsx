@@ -19,6 +19,7 @@ import Trainers from './pages/trainer/Trainers'
 
 import StudentDashboard from './pages/student/Dashboard'
 import EvaluationGuide from './pages/shared/EvaluationGuide'
+import Backup from './pages/admin/Backup'
 
 export default function App() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
               <Route path="participation" element={<Participation />} />
               <Route path="trainers" element={<Trainers />} />
               <Route path="guide" element={<EvaluationGuide />} />
+              <Route path="backup" element={<Backup />} />
             </Route>
 
             {/* Student */}

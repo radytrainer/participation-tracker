@@ -13,25 +13,31 @@ import {
   setDoc,
 } from 'firebase/firestore'
 import { db } from './config'
+import { syncUpsert, syncDelete } from '../lib/sync'
 
 // ── Generic helpers ──────────────────────────────────────────────────────────
 
 export const colRef = (name) => collection(db, name)
 
 export async function addDocument(colName, data) {
-  return addDoc(colRef(colName), { ...data, createdAt: serverTimestamp() })
+  const ref = await addDoc(colRef(colName), { ...data, createdAt: serverTimestamp() })
+  syncUpsert(colName, ref.id, data)
+  return ref
 }
 
 export async function setDocument(colName, id, data) {
-  return setDoc(doc(db, colName, id), { ...data, updatedAt: serverTimestamp() }, { merge: true })
+  await setDoc(doc(db, colName, id), { ...data, updatedAt: serverTimestamp() }, { merge: true })
+  syncUpsert(colName, id, data)
 }
 
 export async function updateDocument(colName, id, data) {
-  return updateDoc(doc(db, colName, id), { ...data, updatedAt: serverTimestamp() })
+  await updateDoc(doc(db, colName, id), { ...data, updatedAt: serverTimestamp() })
+  syncUpsert(colName, id, data)
 }
 
 export async function deleteDocument(colName, id) {
-  return deleteDoc(doc(db, colName, id))
+  await deleteDoc(doc(db, colName, id))
+  syncDelete(colName, id)
 }
 
 export async function getDocument(colName, id) {
