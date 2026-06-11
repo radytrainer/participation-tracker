@@ -35,7 +35,7 @@ export default function Classes() {
     const [allClasses, allSubjects, allTrainers, allAssignments, allStudents] = await Promise.all([
       getAllClasses(),
       getSubjects(),
-      getCollection('users', where('role', '==', 'trainer')),
+      getCollection('users', where('role', 'in', ['admin', 'trainer'])),
       getAssignments(),
       getCollection('users', where('role', '==', 'student')),
     ])

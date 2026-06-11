@@ -84,7 +84,7 @@ export default function Subjects() {
     const [t, c, tr, allSubs, allAsgn] = await Promise.all([
       getTerms(),
       getAllClasses(),
-      getCollection('users', where('role', '==', 'trainer')),
+      getCollection('users', where('role', 'in', ['admin', 'trainer'])),
       getSubjects(),
       getAssignments(),
     ])

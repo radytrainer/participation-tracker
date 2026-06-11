@@ -28,7 +28,12 @@ export default function Trainers() {
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm()
 
   async function load() {
-    const data = await getCollection('users', where('role', '==', 'trainer'))
+    const data = await getCollection('users', where('role', 'in', ['admin', 'trainer']))
+    // admins first, then trainers, both alphabetical
+    data.sort((a, b) => {
+      if (a.role !== b.role) return a.role === 'admin' ? -1 : 1
+      return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+    })
     setTrainers(data)
     setLoading(false)
   }
@@ -70,13 +75,11 @@ export default function Trainers() {
     }
   }
 
-  async function handleDelete(id) {
-    if (id === profile?.id) {
-      toast.error("You can't delete your own account")
-      return
-    }
+  async function handleDelete(t) {
+    if (t.id === profile?.id) { toast.error("You can't delete your own account"); return }
+    if (t.role === 'admin')   { toast.error("Admin accounts can't be deleted here"); return }
     if (!confirm('Delete this trainer account?')) return
-    await deleteDocument('users', id)
+    await deleteDocument('users', t.id)
     toast.success('Trainer deleted')
     load()
   }
@@ -117,7 +120,7 @@ export default function Trainers() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Trainers</h1>
-          <p className="text-sm text-gray-500">{trainers.length} trainer{trainers.length !== 1 ? 's' : ''}</p>
+          <p className="text-sm text-gray-500">{trainers.length} staff member{trainers.length !== 1 ? 's' : ''}</p>
         </div>
         {isAdmin && <Button variant="outline" icon={Upload} onClick={openImport}>Import</Button>}
         {isAdmin && <Button icon={Plus} onClick={openAdd}>Add Trainer</Button>}
@@ -155,14 +158,16 @@ export default function Trainers() {
                   </td>
                   <td className="px-4 py-3 text-gray-500">{t.email}</td>
                   <td className="px-4 py-3">
-                    <Badge color="blue">Trainer</Badge>
+                    <Badge color={t.role === 'admin' ? 'red' : 'blue'}>
+                      {t.role === 'admin' ? 'Admin' : 'Trainer'}
+                    </Badge>
                   </td>
                   {isAdmin && (
                     <td className="px-4 py-3 text-right">
                       <ActionMenu items={[
                         { label: 'Edit', icon: Pencil, onClick: () => openEdit(t) },
                         { divider: true },
-                        { label: 'Delete', icon: Trash2, danger: true, onClick: () => handleDelete(t.id) },
+                        { label: 'Delete', icon: Trash2, danger: true, onClick: () => handleDelete(t) },
                       ]} />
                     </td>
                   )}

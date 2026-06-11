@@ -107,6 +107,7 @@ export default function Participation() {
 
   // Session context (top selector bar)
   const [sessionTerm, setSessionTerm] = useState('')
+  const [sessionMajor, setSessionMajor] = useState('')
   const [sessionSubject, setSessionSubject] = useState('')
   const [sessionAssignments, setSessionAssignments] = useState([])
   const [sessionClass, setSessionClass] = useState('')
@@ -150,7 +151,7 @@ export default function Participation() {
         getTerms(),
         getSubjects(),
         getAllClasses(),
-        getCollection('users', where('role', '==', 'trainer')),
+        getCollection('users', where('role', 'in', ['admin', 'trainer'])),
         getCollection('users', where('role', '==', 'student')),
       ])
       setTerms(t)
@@ -208,10 +209,21 @@ export default function Participation() {
   )
 
   const sessionSubjects = useMemo(() => {
-    if (isAdmin) return sessionTerm ? allSubjects.filter((s) => s.termId === sessionTerm) : allSubjects
-    const ids = new Set(myAssignments.map((a) => a.subjectId))
-    return allSubjects.filter((s) => ids.has(s.id) && (!sessionTerm || s.termId === sessionTerm))
-  }, [sessionTerm, allSubjects, myAssignments, isAdmin])
+    let s = isAdmin ? allSubjects : (() => {
+      const ids = new Set(myAssignments.map((a) => a.subjectId))
+      return allSubjects.filter((x) => ids.has(x.id))
+    })()
+    if (sessionTerm)  s = s.filter((x) => x.termId === sessionTerm)
+    if (sessionMajor) s = s.filter((x) => x.major === sessionMajor)
+    return s
+  }, [sessionTerm, sessionMajor, allSubjects, myAssignments, isAdmin])
+
+  // Majors present in the currently filtered term (drives Major dropdown options)
+  const availableMajors = useMemo(() => {
+    let s = sessionTerm ? allSubjects.filter((x) => x.termId === sessionTerm) : allSubjects
+    const names = [...new Set(s.map((x) => x.major).filter(Boolean))]
+    return names
+  }, [sessionTerm, allSubjects])
 
   // ── Load students into the grid ───────────────────────────────────────────
 
@@ -397,13 +409,14 @@ export default function Participation() {
         {/* Context selector */}
         <div className="px-5 py-4 border-b border-primary-100 dark:border-primary-800">
           <p className="text-xs font-semibold uppercase tracking-wide text-primary-600 mb-3">Session</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
 
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <Select
               label="Term"
               value={sessionTerm}
               onChange={(e) => {
                 setSessionTerm(e.target.value)
+                setSessionMajor('')
                 setSessionSubject('')
                 setSessionAssignments([])
                 setSessionClass('')
@@ -414,6 +427,23 @@ export default function Participation() {
             >
               <option value="">All Terms</option>
               {terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </Select>
+
+            <Select
+              label="Major"
+              value={sessionMajor}
+              onChange={(e) => {
+                setSessionMajor(e.target.value)
+                setSessionSubject('')
+                setSessionAssignments([])
+                setSessionClass('')
+                setSessionStudents([])
+                setRows({})
+                setSessionLoaded(false)
+              }}
+            >
+              <option value="">All Majors</option>
+              {availableMajors.map((m) => <option key={m} value={m}>{m}</option>)}
             </Select>
 
             <Select
