@@ -38,7 +38,7 @@ function ScoreBtn({ value, selected, onChange }) {
       title={SCORE_LABELS[value]}
       onClick={() => onChange(value === selected ? null : value)}
       className={clsx(
-        'w-8 h-8 rounded-lg text-xs font-bold border-2 transition-all duration-100 select-none',
+        'w-6 h-6 rounded text-xs font-bold border transition-all duration-100 select-none',
         selected === value
           ? c.active
           : `bg-white dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-600 ${c.hover}`
@@ -51,7 +51,7 @@ function ScoreBtn({ value, selected, onChange }) {
 
 function ScoreGroup({ value, onChange }) {
   return (
-    <div className="flex gap-1">
+    <div className="flex gap-0.5">
       {[0, 1, 2, 3, 4].map((v) => (
         <ScoreBtn key={v} value={v} selected={value} onChange={onChange} />
       ))}
@@ -71,6 +71,14 @@ function computeScore(row) {
     punctuality: row.punctuality,
     professionalism: row.professionalism,
   })
+}
+
+function getWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
 }
 
 // ── Empty row factory ─────────────────────────────────────────────────────────
@@ -112,7 +120,7 @@ export default function Participation() {
   const [sessionAssignments, setSessionAssignments] = useState([])
   const [sessionClass, setSessionClass] = useState('')
   const [sessionTrainer, setSessionTrainer] = useState('')
-  const [sessionWeek, setSessionWeek] = useState('')
+  const [sessionWeek, setSessionWeek] = useState(String(getWeekNumber(new Date())))
   const [sessionMonth, setSessionMonth] = useState(MONTHS[new Date().getMonth()])
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0])
 
@@ -222,6 +230,19 @@ export default function Participation() {
     const names = [...new Set(s.map((x) => x.major).filter(Boolean))]
     return names
   }, [sessionTerm, allSubjects])
+
+  // Weeks that fall within the selected month (ISO week numbers)
+  const weeksInMonth = useMemo(() => {
+    const year = sessionDate ? new Date(sessionDate + 'T00:00:00').getFullYear() : new Date().getFullYear()
+    const monthIndex = MONTHS.indexOf(sessionMonth)
+    if (monthIndex === -1) return Array.from({ length: 52 }, (_, i) => i + 1)
+    const weeks = new Set()
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
+    for (let d = 1; d <= daysInMonth; d++) {
+      weeks.add(getWeekNumber(new Date(year, monthIndex, d)))
+    }
+    return [...weeks].sort((a, b) => a - b)
+  }, [sessionMonth, sessionDate])
 
   // ── Load students into the grid ───────────────────────────────────────────
 
@@ -478,18 +499,26 @@ export default function Participation() {
             </Select>
 
             <Select
+              label="Month"
+              value={sessionMonth}
+              onChange={(e) => {
+                setSessionMonth(e.target.value)
+                setSessionWeek('')
+                setSessionLoaded(false)
+              }}
+            >
+              {MONTHS.map((m) => <option key={m}>{m}</option>)}
+            </Select>
+
+            <Select
               label="Week *"
               value={sessionWeek}
               onChange={(e) => { setSessionWeek(e.target.value); setSessionLoaded(false) }}
             >
-              <option value="">Week</option>
-              {Array.from({ length: 52 }, (_, i) => i + 1).map((w) => (
+              <option value="">Select week</option>
+              {weeksInMonth.map((w) => (
                 <option key={w} value={w}>Week {w}</option>
               ))}
-            </Select>
-
-            <Select label="Month" value={sessionMonth} onChange={(e) => setSessionMonth(e.target.value)}>
-              {MONTHS.map((m) => <option key={m}>{m}</option>)}
             </Select>
 
             <Input
@@ -548,19 +577,19 @@ export default function Participation() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[1050px] text-sm">
                 <thead className="bg-white dark:bg-gray-800/50 sticky top-0 z-10">
                   <tr>
-                    <th className="text-left px-4 py-3 text-gray-600 dark:text-gray-400 font-semibold min-w-[180px]">Student</th>
+                    <th className="text-left px-3 py-2 text-gray-600 dark:text-gray-400 font-semibold min-w-[130px]">Student</th>
                     {CRITERIA.map((c) => (
-                      <th key={c.key} className="px-3 py-3 text-center whitespace-nowrap">
+                      <th key={c.key} className="px-2 py-2 text-center whitespace-nowrap">
                         <div className="text-gray-600 dark:text-gray-400 font-semibold">{c.label.split(' ')[0]}</div>
                         <div className="text-xs text-gray-400 font-normal">{c.weight}</div>
                       </th>
                     ))}
-                    <th className="px-3 py-3 text-center text-gray-600 dark:text-gray-400 font-semibold">Score</th>
-                    <th className="px-3 py-3 text-center text-gray-600 dark:text-gray-400 font-semibold">Grade</th>
-                    <th className="px-3 py-3 text-center text-gray-600 dark:text-gray-400 font-semibold w-10"></th>
+                    <th className="px-2 py-2 text-center text-gray-600 dark:text-gray-400 font-semibold">Score</th>
+                    <th className="px-2 py-2 text-center text-gray-600 dark:text-gray-400 font-semibold">Grade</th>
+                    <th className="px-2 py-2 text-center text-gray-600 dark:text-gray-400 font-semibold w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -582,13 +611,13 @@ export default function Participation() {
                         )}
                       >
                         {/* Student name */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 flex-shrink-0 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-700 text-xs font-bold">
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-6 w-6 flex-shrink-0 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-700 text-[10px] font-bold">
                               {student.firstName?.[0]}{student.lastName?.[0]}
                             </div>
                             <div>
-                              <p className="font-medium text-gray-900 dark:text-gray-100 leading-tight">
+                              <p className="text-xs font-medium text-gray-900 dark:text-gray-100 leading-tight">
                                 {student.firstName} {student.lastName}
                               </p>
                               {isExisting && (
@@ -600,7 +629,7 @@ export default function Participation() {
 
                         {/* Score buttons for each criterion */}
                         {CRITERIA.map((c) => (
-                          <td key={c.key} className="px-3 py-3">
+                          <td key={c.key} className="px-2 py-2">
                             <ScoreGroup
                               value={row[c.key]}
                               onChange={(v) => updateRow(student.id, c.key, v)}
@@ -609,9 +638,9 @@ export default function Participation() {
                         ))}
 
                         {/* Live score */}
-                        <td className="px-3 py-3 text-center">
+                        <td className="px-2 py-2 text-center">
                           <span className={clsx(
-                            'text-base font-bold',
+                            'text-sm font-bold',
                             score === null ? 'text-gray-300' : 'text-primary-600'
                           )}>
                             {score !== null ? `${score}%` : '—'}
@@ -619,12 +648,12 @@ export default function Participation() {
                         </td>
 
                         {/* Grade */}
-                        <td className="px-3 py-3 text-center">
+                        <td className="px-2 py-2 text-center">
                           {grade ? <GradeBadge grade={grade} /> : <span className="text-gray-300 text-xs">—</span>}
                         </td>
 
                         {/* Feedback toggle */}
-                        <td className="px-3 py-3 text-center">
+                        <td className="px-2 py-2 text-center">
                           <button
                             type="button"
                             title="Feedback"
