@@ -24,12 +24,8 @@ const adminLinks = [
 
 const trainerLinks = [
   { to: '/trainer/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/trainer/subjects', icon: BookMarked, label: 'Subjects' },
-  { to: '/trainer/classes', icon: BookOpen, label: 'Classes' },
-  { to: '/trainer/students', icon: Users, label: 'Students' },
   { to: '/trainer/participation', icon: ClipboardList, label: 'Participation' },
   { divider: true },
-  { to: '/trainer/trainers', icon: ShieldCheck, label: 'Trainers' },
   { to: '/trainer/guide', icon: HelpCircle, label: 'Evaluation Guide' },
 ]
 

@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import {
   getTerms, getSubjects, getAssignmentsBySubject, getAssignmentsByTrainer,
   getStudents, getAllClasses, getCollection,
-  getParticipation, getTrainerParticipation,
+  getParticipation,
   addParticipation, updateParticipation, deleteParticipation,
 } from '../../firebase/firestore'
 import { where } from 'firebase/firestore'
@@ -169,10 +169,7 @@ export default function Participation() {
 
   async function loadRecords() {
     setRecordsLoading(true)
-    const recs = isAdmin
-      ? await getParticipation()
-      : await getTrainerParticipation(myId)
-    setRecords(recs)
+    setRecords(await getParticipation())
     setRecordsLoading(false)
   }
 
@@ -209,10 +206,11 @@ export default function Participation() {
   )
 
   const sessionSubjects = useMemo(() => {
-    let s = isAdmin ? allSubjects : (() => {
+    let s = allSubjects
+    if (!isAdmin) {
       const ids = new Set(myAssignments.map((a) => a.subjectId))
-      return allSubjects.filter((x) => ids.has(x.id))
-    })()
+      s = s.filter((x) => ids.has(x.id))
+    }
     if (sessionTerm)  s = s.filter((x) => x.termId === sessionTerm)
     if (sessionMajor) s = s.filter((x) => x.major === sessionMajor)
     return s
@@ -378,12 +376,17 @@ export default function Participation() {
     return item ? fields.map((f) => item[f]).filter(Boolean).join(' ') : '—'
   }
 
-  const filteredRecords = useMemo(() => records.filter((r) => {
-    if (filterTerm && r.termId !== filterTerm) return false
-    if (filterSubject && r.subjectId !== filterSubject) return false
-    if (filterClass && r.classId !== filterClass) return false
-    return true
-  }), [records, filterTerm, filterSubject, filterClass])
+  const filteredRecords = useMemo(() => {
+    let recs = records
+    if (!isAdmin) {
+      const pairs = new Set(myAssignments.map((a) => `${a.subjectId}:${a.classId}`))
+      recs = recs.filter((r) => pairs.has(`${r.subjectId}:${r.classId}`))
+    }
+    if (filterTerm)    recs = recs.filter((r) => r.termId    === filterTerm)
+    if (filterSubject) recs = recs.filter((r) => r.subjectId === filterSubject)
+    if (filterClass)   recs = recs.filter((r) => r.classId   === filterClass)
+    return recs
+  }, [records, filterTerm, filterSubject, filterClass, isAdmin, myAssignments])
 
   const filterSubjectOptions = useMemo(
     () => filterTerm ? allSubjects.filter((s) => s.termId === filterTerm) : allSubjects,
