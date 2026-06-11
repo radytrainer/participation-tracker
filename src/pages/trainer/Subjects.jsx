@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Plus, Pencil, Trash2, BookMarked, UserPlus, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, BookMarked, UserPlus, X, Search, Users2 } from 'lucide-react'
 import ActionMenu from '../../components/ui/ActionMenu'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../../context/AuthContext'
 import {
   getTerms, getSubjects, addSubject, updateSubject, deleteSubject,
   getAllClasses, getCollection, getAssignmentsBySubject,
-  addAssignment, deleteAssignment,
+  getAssignments, addAssignment, deleteAssignment,
 } from '../../firebase/firestore'
 import { where } from 'firebase/firestore'
 import toast from 'react-hot-toast'
@@ -15,6 +15,17 @@ import Modal from '../../components/ui/Modal'
 import Input, { Select } from '../../components/ui/Input'
 import LoadingSpinner from '../../components/ui/LoadingSpinner'
 import { Badge } from '../../components/ui/Badge'
+import clsx from 'clsx'
+
+// One color palette entry per term slot (cycles if more than 6 terms)
+const TERM_COLORS = [
+  { tab: 'border-blue-500 text-blue-600', dot: 'bg-blue-500', light: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800', icon: 'text-blue-600' },
+  { tab: 'border-emerald-500 text-emerald-600', dot: 'bg-emerald-500', light: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800', icon: 'text-emerald-600' },
+  { tab: 'border-violet-500 text-violet-600', dot: 'bg-violet-500', light: 'bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800', icon: 'text-violet-600' },
+  { tab: 'border-orange-500 text-orange-600', dot: 'bg-orange-500', light: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800', icon: 'text-orange-600' },
+  { tab: 'border-rose-500 text-rose-600', dot: 'bg-rose-500', light: 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800', icon: 'text-rose-600' },
+  { tab: 'border-amber-500 text-amber-600', dot: 'bg-amber-500', light: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800', icon: 'text-amber-600' },
+]
 
 export default function Subjects() {
   const { profile } = useAuth()
@@ -24,9 +35,12 @@ export default function Subjects() {
   const [subjects, setSubjects] = useState([])
   const [classes, setClasses] = useState([])
   const [trainers, setTrainers] = useState([])
-  const [assignments, setAssignments] = useState({}) // subjectId → assignments[]
+  const [assignments, setAssignments] = useState({})  // subjectId → assignment[]
   const [loading, setLoading] = useState(true)
-  const [filterTerm, setFilterTerm] = useState('')
+
+  // Filter state — client-side only, no extra Firestore queries
+  const [activeTerm, setActiveTerm] = useState('all')
+  const [search, setSearch] = useState('')
 
   // Subject modal
   const [subjectModal, setSubjectModal] = useState(false)
@@ -34,42 +48,76 @@ export default function Subjects() {
 
   // Assignment modal
   const [assignModal, setAssignModal] = useState(false)
-  const [assignTarget, setAssignTarget] = useState(null) // subject being assigned
+  const [assignTarget, setAssignTarget] = useState(null)
 
   const subjectForm = useForm()
   const assignForm = useForm()
 
   async function load() {
-    const [t, c, tr] = await Promise.all([
+    const [t, c, tr, allSubs, allAsgn] = await Promise.all([
       getTerms(),
       getAllClasses(),
       getCollection('users', where('role', '==', 'trainer')),
+      getSubjects(),          // all subjects, filter client-side
+      getAssignments(),       // all assignments, group by subjectId
     ])
+
     setTerms(t)
     setClasses(c)
     setTrainers(tr)
+    setSubjects(allSubs)
 
-    const s = await getSubjects(filterTerm || undefined)
-    setSubjects(s)
-
-    // load assignments for all subjects
-    const assignMap = {}
-    await Promise.all(
-      s.map(async (sub) => {
-        const a = await getAssignmentsBySubject(sub.id)
-        assignMap[sub.id] = a
-      })
-    )
-    setAssignments(assignMap)
+    const map = {}
+    allAsgn.forEach((a) => {
+      if (!map[a.subjectId]) map[a.subjectId] = []
+      map[a.subjectId].push(a)
+    })
+    setAssignments(map)
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [filterTerm])
+  useEffect(() => { load() }, [])
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+
+  const termColor = (termId) => {
+    const idx = terms.findIndex((t) => t.id === termId)
+    return TERM_COLORS[idx >= 0 ? idx % TERM_COLORS.length : 0]
+  }
+
+  const countByTerm = useMemo(() => {
+    const c = { all: subjects.length }
+    subjects.forEach((s) => { c[s.termId] = (c[s.termId] || 0) + 1 })
+    return c
+  }, [subjects])
+
+  const filtered = useMemo(() => {
+    let s = subjects
+    if (activeTerm !== 'all') s = s.filter((x) => x.termId === activeTerm)
+    const q = search.trim().toLowerCase()
+    if (q) s = s.filter((x) =>
+      x.name?.toLowerCase().includes(q) ||
+      x.code?.toLowerCase().includes(q) ||
+      x.description?.toLowerCase().includes(q)
+    )
+    return s
+  }, [subjects, activeTerm, search])
+
+  // Group filtered subjects by term for the "All" tab
+  const groupedByTerm = useMemo(() => {
+    if (activeTerm !== 'all') return null
+    const groups = {}
+    filtered.forEach((s) => {
+      if (!groups[s.termId]) groups[s.termId] = []
+      groups[s.termId].push(s)
+    })
+    return groups
+  }, [filtered, activeTerm])
 
   // ── Subject CRUD ──────────────────────────────────────────────────────────
 
   function openAddSubject() {
-    subjectForm.reset({ termId: filterTerm || '' })
+    subjectForm.reset({ termId: activeTerm !== 'all' ? activeTerm : '' })
     setEditingSubject(null)
     setSubjectModal(true)
   }
@@ -91,16 +139,12 @@ export default function Subjects() {
       }
       setSubjectModal(false)
       load()
-    } catch (e) {
-      toast.error(e.message)
-    }
+    } catch (e) { toast.error(e.message) }
   }
 
   async function handleDeleteSubject(id) {
     if (!confirm('Delete this subject? All assignments will also be removed.')) return
-    // delete assignments first
-    const a = assignments[id] || []
-    await Promise.all(a.map((x) => deleteAssignment(x.id)))
+    await Promise.all((assignments[id] || []).map((a) => deleteAssignment(a.id)))
     await deleteSubject(id)
     toast.success('Subject deleted')
     load()
@@ -119,10 +163,7 @@ export default function Subjects() {
       const existing = (assignments[assignTarget.id] || []).find(
         (a) => a.classId === data.classId && a.trainerId === data.trainerId
       )
-      if (existing) {
-        toast.error('This trainer is already assigned to this class for this subject')
-        return
-      }
+      if (existing) { toast.error('Already assigned'); return }
       await addAssignment({
         subjectId: assignTarget.id,
         termId: assignTarget.termId,
@@ -132,23 +173,21 @@ export default function Subjects() {
       toast.success('Assignment added')
       setAssignModal(false)
       load()
-    } catch (e) {
-      toast.error(e.message)
-    }
+    } catch (e) { toast.error(e.message) }
   }
 
   async function removeAssignment(id) {
     await deleteAssignment(id)
-    toast.success('Assignment removed')
+    toast.success('Removed')
     load()
   }
 
-  const termName = (id) => terms.find((t) => t.id === id)?.name || '—'
   const className = (id) => classes.find((c) => c.id === id)?.name || '—'
   const trainerName = (id) => {
     const t = trainers.find((x) => x.id === id)
     return t ? `${t.firstName} ${t.lastName}` : '—'
   }
+  const termName = (id) => terms.find((t) => t.id === id)?.name || '—'
 
   const subjectErrors = subjectForm.formState.errors
   const assignErrors = assignForm.formState.errors
@@ -156,19 +195,15 @@ export default function Subjects() {
   if (loading) return <LoadingSpinner />
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Subjects</h1>
-          <p className="text-sm text-gray-500">{subjects.length} subjects</p>
+          <p className="text-sm text-gray-500">{filtered.length} of {subjects.length} subjects</p>
         </div>
-        <div className="flex gap-2">
-          <Select value={filterTerm} onChange={(e) => setFilterTerm(e.target.value)}>
-            <option value="">All Terms</option>
-            {terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </Select>
-          {isAdmin && <Button icon={Plus} onClick={openAddSubject}>Add Subject</Button>}
-        </div>
+        {isAdmin && <Button icon={Plus} onClick={openAddSubject}>Add Subject</Button>}
       </div>
 
       {!isAdmin && (
@@ -177,80 +212,108 @@ export default function Subjects() {
         </div>
       )}
 
-      <div className="space-y-4">
-        {subjects.map((sub) => (
-          <div
-            key={sub.id}
-            className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden"
-          >
-            {/* Subject header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-primary-50 dark:bg-primary-900/20 p-2.5">
-                  <BookMarked className="h-4 w-4 text-primary-600" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">{sub.name}</h3>
-                    {sub.code && <Badge color="gray">{sub.code}</Badge>}
-                  </div>
-                  <p className="text-xs text-gray-400">{termName(sub.termId)}</p>
-                </div>
-              </div>
-              {isAdmin && (
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" icon={UserPlus} onClick={() => openAssign(sub)}>
-                    Assign
-                  </Button>
-                  <ActionMenu items={[
-                    { label: 'Edit', icon: Pencil, onClick: () => openEditSubject(sub) },
-                    { divider: true },
-                    { label: 'Delete', icon: Trash2, danger: true, onClick: () => handleDeleteSubject(sub.id) },
-                  ]} />
-                </div>
-              )}
-            </div>
+      {/* ── Search + Term tabs ─────────────────────────────────────────── */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
 
-            {/* Assignments table */}
-            <div className="px-5 py-3">
-              {(assignments[sub.id] || []).length === 0 ? (
-                <p className="text-sm text-gray-400 py-2">No trainer-class assignments yet.</p>
-              ) : (
-                <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {(assignments[sub.id] || []).map((a) => (
-                    <div key={a.id} className="flex items-center justify-between py-2">
-                      <div className="flex items-center gap-6 text-sm">
-                        <span className="text-gray-700 dark:text-gray-300 font-medium">
-                          {trainerName(a.trainerId)}
-                        </span>
-                        <span className="text-gray-400">→</span>
-                        <span className="text-gray-600 dark:text-gray-400">{className(a.classId)}</span>
-                      </div>
-                      {isAdmin && (
-                        <button
-                          onClick={() => removeAssignment(a.id)}
-                          className="rounded p-1 text-gray-300 hover:text-red-500"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+        {/* Search bar */}
+        <div className="px-4 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name or code…"
+              className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 pl-9 pr-4 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-        ))}
+        </div>
 
-        {subjects.length === 0 && (
-          <div className="text-center py-12 text-gray-400">
-            <BookMarked className="h-10 w-10 mx-auto mb-3 opacity-50" />
-            <p>No subjects yet.{isAdmin ? ' Add one to get started.' : ''}</p>
-          </div>
-        )}
+        {/* Term tabs */}
+        <div className="flex overflow-x-auto scrollbar-hide">
+          <TermTab
+            label="All Terms"
+            count={countByTerm.all ?? 0}
+            active={activeTerm === 'all'}
+            onClick={() => setActiveTerm('all')}
+          />
+          {terms.map((t, i) => (
+            <TermTab
+              key={t.id}
+              label={t.name}
+              count={countByTerm[t.id] ?? 0}
+              color={TERM_COLORS[i % TERM_COLORS.length]}
+              active={activeTerm === t.id}
+              onClick={() => setActiveTerm(t.id)}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Subject Modal */}
+      {/* ── Subject cards ──────────────────────────────────────────────── */}
+      {activeTerm === 'all' && !search ? (
+        // Grouped by term when showing "All" without a search query
+        <div className="space-y-6">
+          {terms.map((t, i) => {
+            const termSubs = (groupedByTerm || {})[t.id] || []
+            if (termSubs.length === 0) return null
+            const color = TERM_COLORS[i % TERM_COLORS.length]
+            return (
+              <section key={t.id}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className={clsx('h-2.5 w-2.5 rounded-full flex-shrink-0', color.dot)} />
+                  <h2 className="font-semibold text-gray-700 dark:text-gray-300 text-sm uppercase tracking-wide">
+                    {t.name}
+                  </h2>
+                  <span className="text-xs text-gray-400">({termSubs.length})</span>
+                </div>
+                <SubjectGrid
+                  subjects={termSubs}
+                  assignments={assignments}
+                  color={color}
+                  isAdmin={isAdmin}
+                  className={className}
+                  trainerName={trainerName}
+                  termName={termName}
+                  onEdit={openEditSubject}
+                  onDelete={handleDeleteSubject}
+                  onAssign={openAssign}
+                  onRemoveAssignment={removeAssignment}
+                />
+              </section>
+            )
+          })}
+          {Object.keys(groupedByTerm || {}).length === 0 && <EmptyState />}
+        </div>
+      ) : (
+        // Flat grid when a term tab is selected or searching
+        filtered.length > 0 ? (
+          <SubjectGrid
+            subjects={filtered}
+            assignments={assignments}
+            color={activeTerm !== 'all' ? TERM_COLORS[terms.findIndex((t) => t.id === activeTerm) % TERM_COLORS.length] : null}
+            multiColor={activeTerm === 'all'}
+            termColorFn={termColor}
+            isAdmin={isAdmin}
+            className={className}
+            trainerName={trainerName}
+            termName={termName}
+            onEdit={openEditSubject}
+            onDelete={handleDeleteSubject}
+            onAssign={openAssign}
+            onRemoveAssignment={removeAssignment}
+          />
+        ) : (
+          <EmptyState query={search} />
+        )
+      )}
+
+      {/* ── Modals ─────────────────────────────────────────────────────── */}
       {isAdmin && (
         <>
           <Modal open={subjectModal} onClose={() => setSubjectModal(false)} title={editingSubject ? 'Edit Subject' : 'Add Subject'}>
@@ -269,16 +332,8 @@ export default function Subjects() {
                 error={subjectErrors.name?.message}
                 {...subjectForm.register('name', { required: 'Required' })}
               />
-              <Input
-                label="Subject Code"
-                placeholder="e.g. ALG101"
-                {...subjectForm.register('code')}
-              />
-              <Input
-                label="Description"
-                placeholder="Optional description"
-                {...subjectForm.register('description')}
-              />
+              <Input label="Subject Code" placeholder="e.g. ALG101" {...subjectForm.register('code')} />
+              <Input label="Description" placeholder="Optional description" {...subjectForm.register('description')} />
               <div className="flex gap-3 justify-end pt-2">
                 <Button type="button" variant="secondary" onClick={() => setSubjectModal(false)}>Cancel</Button>
                 <Button type="submit" loading={subjectForm.formState.isSubmitting}>
@@ -288,8 +343,7 @@ export default function Subjects() {
             </form>
           </Modal>
 
-          {/* Assignment Modal */}
-          <Modal open={assignModal} onClose={() => setAssignModal(false)} title={`Assign Trainer — ${assignTarget?.name}`}>
+          <Modal open={assignModal} onClose={() => setAssignModal(false)} title={`Assign — ${assignTarget?.name}`}>
             <form onSubmit={assignForm.handleSubmit(onAssignSubmit)} className="space-y-4">
               <p className="text-sm text-gray-500">Select a trainer and the class they teach this subject in.</p>
               <Select
@@ -298,9 +352,7 @@ export default function Subjects() {
                 {...assignForm.register('trainerId', { required: 'Required' })}
               >
                 <option value="">Select trainer</option>
-                {trainers.map((t) => (
-                  <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>
-                ))}
+                {trainers.map((t) => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
               </Select>
               <Select
                 label="Class *"
@@ -308,9 +360,7 @@ export default function Subjects() {
                 {...assignForm.register('classId', { required: 'Required' })}
               >
                 <option value="">Select class</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
               <div className="flex gap-3 justify-end pt-2">
                 <Button type="button" variant="secondary" onClick={() => setAssignModal(false)}>Cancel</Button>
@@ -320,6 +370,166 @@ export default function Subjects() {
           </Modal>
         </>
       )}
+    </div>
+  )
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function TermTab({ label, count, color, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'flex items-center gap-2 px-5 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors flex-shrink-0',
+        active
+          ? color
+            ? `${color.tab} bg-gray-50 dark:bg-gray-700/30`
+            : 'border-primary-500 text-primary-600 bg-gray-50 dark:bg-gray-700/30'
+          : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/20'
+      )}
+    >
+      {label}
+      <span className={clsx(
+        'inline-flex items-center justify-center min-w-[20px] h-5 rounded-full text-xs px-1.5',
+        active
+          ? 'bg-current text-white opacity-90'
+          : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+      )}>
+        {count}
+      </span>
+    </button>
+  )
+}
+
+function SubjectGrid({
+  subjects, assignments, color, multiColor, termColorFn,
+  isAdmin, className, trainerName, termName,
+  onEdit, onDelete, onAssign, onRemoveAssignment,
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {subjects.map((sub) => {
+        const c = multiColor ? termColorFn(sub.termId) : (color || TERM_COLORS[0])
+        return (
+          <SubjectCard
+            key={sub.id}
+            subject={sub}
+            color={c}
+            assignments={assignments[sub.id] || []}
+            isAdmin={isAdmin}
+            className={className}
+            trainerName={trainerName}
+            termName={termName}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onAssign={onAssign}
+            onRemoveAssignment={onRemoveAssignment}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function SubjectCard({
+  subject, color, assignments, isAdmin,
+  className, trainerName, termName,
+  onEdit, onDelete, onAssign, onRemoveAssignment,
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm flex flex-col overflow-hidden">
+
+      {/* Colored accent bar */}
+      <div className={clsx('h-1 w-full', color.dot)} />
+
+      {/* Card body */}
+      <div className="flex-1 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h3 className="font-semibold text-gray-900 dark:text-white truncate">{subject.name}</h3>
+              {subject.code && <Badge color="gray">{subject.code}</Badge>}
+            </div>
+            {subject.description && (
+              <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{subject.description}</p>
+            )}
+            <p className={clsx('text-xs mt-1 font-medium', color.icon)}>{termName(subject.termId)}</p>
+          </div>
+          {isAdmin && (
+            <ActionMenu items={[
+              { label: 'Edit', icon: Pencil, onClick: () => onEdit(subject) },
+              { divider: true },
+              { label: 'Delete', icon: Trash2, danger: true, onClick: () => onDelete(subject.id) },
+            ]} />
+          )}
+        </div>
+
+        {/* Assignments */}
+        <div className="mt-3">
+          {assignments.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">No trainer assigned yet</p>
+          ) : (
+            <div className="space-y-1.5">
+              {assignments.map((a) => (
+                <div
+                  key={a.id}
+                  className={clsx(
+                    'flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-xs',
+                    color.light
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Users2 className={clsx('h-3 w-3 flex-shrink-0', color.icon)} />
+                    <span className="font-medium text-gray-700 dark:text-gray-300 truncate">
+                      {trainerName(a.trainerId)}
+                    </span>
+                    <span className="text-gray-400 flex-shrink-0">·</span>
+                    <span className="text-gray-500 truncate">{className(a.classId)}</span>
+                  </div>
+                  {isAdmin && (
+                    <button
+                      onClick={() => onRemoveAssignment(a.id)}
+                      className="text-gray-300 hover:text-red-500 flex-shrink-0 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Card footer */}
+      {isAdmin && (
+        <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+          <button
+            onClick={() => onAssign(subject)}
+            className={clsx(
+              'flex items-center gap-1.5 text-xs font-medium transition-colors',
+              color.icon,
+              'hover:opacity-75'
+            )}
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            Assign Trainer
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EmptyState({ query }) {
+  return (
+    <div className="text-center py-16 text-gray-400">
+      <BookMarked className="h-12 w-12 mx-auto mb-3 opacity-40" />
+      {query
+        ? <p>No subjects match <strong className="text-gray-500">"{query}"</strong></p>
+        : <p>No subjects in this term yet.</p>
+      }
     </div>
   )
 }
