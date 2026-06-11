@@ -56,7 +56,7 @@ export default function StudentDashboard() {
   const gradeData = useMemo(() => gradeDistribution(records), [records])
 
   const feedbacks = useMemo(() =>
-    [...records].reverse().filter((r) => r.feedback).slice(0, 5),
+    [...records].reverse().filter((r) => r.feedback).slice(0, 2),
     [records]
   )
 

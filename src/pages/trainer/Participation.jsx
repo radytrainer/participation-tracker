@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Save, Pencil, Trash2, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../../context/AuthContext'
@@ -59,6 +60,30 @@ function ScoreGroup({ value, onChange }) {
   )
 }
 
+function ScoreGroupReadonly({ value }) {
+  return (
+    <div className="flex gap-0.5">
+      {[0, 1, 2, 3, 4].map((v) => {
+        const c = SCORE_COLORS[v]
+        return (
+          <div
+            key={v}
+            title={SCORE_LABELS[v]}
+            className={clsx(
+              'w-7 h-7 rounded-full text-xs font-bold border flex items-center justify-center select-none',
+              value === v
+                ? c.active
+                : 'bg-white dark:bg-gray-800 text-gray-300 dark:text-gray-600 border-gray-200 dark:border-gray-700'
+            )}
+          >
+            {v}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Live weighted score ───────────────────────────────────────────────────────
 
 function computeScore(row) {
@@ -94,7 +119,6 @@ function emptyRow(studentId) {
     feedback: '',
     existingId: null,
     dirty: false,
-    showFeedback: false,
   }
 }
 
@@ -137,6 +161,16 @@ export default function Participation() {
   const [filterSubject, setFilterSubject] = useState('')
   const [filterClass, setFilterClass] = useState('')
   const [showRecords, setShowRecords] = useState(false)
+
+  // Feedback popup (session grid)
+  const [openFeedbackId, setOpenFeedbackId] = useState(null)
+  const [feedbackPos, setFeedbackPos] = useState({ top: 0, right: 0 })
+  const feedbackPopupRef = useRef(null)
+
+  // Feedback popup (records table — view-only)
+  const [openRecordFeedbackId, setOpenRecordFeedbackId] = useState(null)
+  const [recordFeedbackPos, setRecordFeedbackPos] = useState({ top: 0, right: 0 })
+  const recordFeedbackPopupRef = useRef(null)
 
   // Edit modal (single record)
   const [editModal, setEditModal] = useState(false)
@@ -182,6 +216,44 @@ export default function Participation() {
   }
 
   useEffect(() => { loadRecords() }, [])
+
+  // ── Feedback popup ────────────────────────────────────────────────────────
+
+  function toggleFeedback(studentId, btnEl) {
+    if (openFeedbackId === studentId) { setOpenFeedbackId(null); return }
+    const rect = btnEl.getBoundingClientRect()
+    setFeedbackPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right })
+    setOpenFeedbackId(studentId)
+  }
+
+  useEffect(() => {
+    if (!openFeedbackId) return
+    function onOutside(e) {
+      if (feedbackPopupRef.current && !feedbackPopupRef.current.contains(e.target)) {
+        setOpenFeedbackId(null)
+      }
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [openFeedbackId])
+
+  function toggleRecordFeedback(recordId, btnEl) {
+    if (openRecordFeedbackId === recordId) { setOpenRecordFeedbackId(null); return }
+    const rect = btnEl.getBoundingClientRect()
+    setRecordFeedbackPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right })
+    setOpenRecordFeedbackId(recordId)
+  }
+
+  useEffect(() => {
+    if (!openRecordFeedbackId) return
+    function onOutside(e) {
+      if (recordFeedbackPopupRef.current && !recordFeedbackPopupRef.current.contains(e.target)) {
+        setOpenRecordFeedbackId(null)
+      }
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [openRecordFeedbackId])
 
   // ── Session: subject changes → load assignments ───────────────────────────
 
@@ -277,12 +349,12 @@ export default function Participation() {
             feedback: ex.feedback || '',
             existingId: ex.id,
             dirty: false,
-            showFeedback: false,
           }
         : emptyRow(s.id)
     })
     setRows(initialRows)
     setSessionLoaded(true)
+    setOpenFeedbackId(null)
   }
 
   // ── Row updates ───────────────────────────────────────────────────────────
@@ -630,10 +702,10 @@ export default function Participation() {
                         {/* Score buttons for each criterion */}
                         {CRITERIA.map((c) => (
                           <td key={c.key} className="px-2 py-2">
-                            <ScoreGroup
-                              value={row[c.key]}
-                              onChange={(v) => updateRow(student.id, c.key, v)}
-                            />
+                            {isExisting
+                              ? <ScoreGroupReadonly value={row[c.key]} />
+                              : <ScoreGroup value={row[c.key]} onChange={(v) => updateRow(student.id, c.key, v)} />
+                            }
                           </td>
                         ))}
 
@@ -656,41 +728,17 @@ export default function Participation() {
                         <td className="px-2 py-2 text-center">
                           <button
                             type="button"
-                            title="Feedback"
-                            onClick={() => updateRow(student.id, 'showFeedback', !row.showFeedback)}
+                            title={row.feedback ? `Feedback: ${row.feedback}` : 'Add feedback'}
+                            onClick={(e) => toggleFeedback(student.id, e.currentTarget)}
                             className={clsx(
                               'rounded-lg p-1.5 transition-colors',
-                              row.showFeedback || row.feedback
+                              openFeedbackId === student.id || row.feedback
                                 ? 'text-primary-600 bg-primary-50 dark:bg-primary-900/20'
                                 : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
                             )}
                           >
                             <MessageSquare className="h-4 w-4" />
                           </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-
-                  {/* Inline feedback rows */}
-                  {sessionStudents.map((student) => {
-                    const row = rows[student.id]
-                    if (!row?.showFeedback) return null
-                    return (
-                      <tr key={`fb-${student.id}`} className="bg-blue-50/50 dark:bg-blue-900/10">
-                        <td colSpan={9} className="px-4 py-2">
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-gray-500 font-medium w-32 flex-shrink-0">
-                              {student.firstName}'s feedback:
-                            </span>
-                            <input
-                              type="text"
-                              value={row.feedback}
-                              onChange={(e) => updateRow(student.id, 'feedback', e.target.value)}
-                              placeholder="Optional trainer feedback..."
-                              className="flex-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                            />
-                          </div>
                         </td>
                       </tr>
                     )
@@ -772,6 +820,7 @@ export default function Participation() {
                     <th className="text-center px-4 py-3">Prof</th>
                     <th className="text-center px-4 py-3">Score</th>
                     <th className="text-center px-4 py-3">Grade</th>
+                    <th className="text-center px-4 py-3">Note</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -792,6 +841,21 @@ export default function Participation() {
                       <td className="px-4 py-3 text-center">{r.professionalism}</td>
                       <td className="px-4 py-3 text-center font-semibold text-primary-600">{r.weightedScore}%</td>
                       <td className="px-4 py-3 text-center"><GradeBadge grade={r.grade} /></td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          title={r.feedback || 'No feedback'}
+                          onClick={(e) => r.feedback && toggleRecordFeedback(r.id, e.currentTarget)}
+                          className={clsx(
+                            'rounded-lg p-1.5 transition-colors',
+                            r.feedback
+                              ? 'text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 cursor-pointer'
+                              : 'text-gray-200 dark:text-gray-700 cursor-default'
+                          )}
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <ActionMenu items={[
                           { label: 'Edit', icon: Pencil, onClick: () => openEdit(r) },
@@ -802,7 +866,7 @@ export default function Participation() {
                     </tr>
                   ))}
                   {filteredRecords.length === 0 && (
-                    <tr><td colSpan={13} className="text-center py-10 text-gray-400">No records found.</td></tr>
+                    <tr><td colSpan={14} className="text-center py-10 text-gray-400">No records found.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -844,6 +908,49 @@ export default function Participation() {
           </div>
         </form>
       </Modal>
+
+      {/* ── RECORD FEEDBACK POPUP (portal, view-only) ──────────────────── */}
+      {openRecordFeedbackId && createPortal(
+        <div
+          ref={recordFeedbackPopupRef}
+          style={{ position: 'fixed', top: recordFeedbackPos.top, right: recordFeedbackPos.right, zIndex: 9999 }}
+          className="w-60 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 p-3"
+        >
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">Feedback</p>
+          <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+            {filteredRecords.find((r) => r.id === openRecordFeedbackId)?.feedback || '—'}
+          </p>
+        </div>,
+        document.body
+      )}
+
+      {/* ── FEEDBACK POPUP (portal) ─────────────────────────────────────── */}
+      {openFeedbackId && createPortal(
+        <div
+          ref={feedbackPopupRef}
+          style={{ position: 'fixed', top: feedbackPos.top, right: feedbackPos.right, zIndex: 9999 }}
+          className="w-60 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 p-3"
+        >
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+            {sessionStudents.find((s) => s.id === openFeedbackId)?.firstName}'s feedback
+          </p>
+          <textarea
+            autoFocus
+            value={rows[openFeedbackId]?.feedback || ''}
+            onChange={(e) => updateRow(openFeedbackId, 'feedback', e.target.value)}
+            placeholder="Write feedback..."
+            rows={3}
+            className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 px-2.5 py-2 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+          />
+          {rows[openFeedbackId]?.feedback && (
+            <p className="text-right text-[10px] text-gray-400 mt-1">
+              {rows[openFeedbackId].feedback.length} chars
+            </p>
+          )}
+        </div>,
+        document.body
+      )}
+
     </div>
   )
 }
