@@ -102,6 +102,7 @@ export default function Participation() {
   const [allSubjects, setAllSubjects] = useState([])
   const [allClasses, setAllClasses] = useState([])
   const [allTrainers, setAllTrainers] = useState([])
+  const [allStudents, setAllStudents] = useState([])
   const [myAssignments, setMyAssignments] = useState([])
 
   // Session context (top selector bar)
@@ -145,16 +146,18 @@ export default function Participation() {
 
   useEffect(() => {
     async function init() {
-      const [t, s, c, tr] = await Promise.all([
+      const [t, s, c, tr, stu] = await Promise.all([
         getTerms(),
         getSubjects(),
         getAllClasses(),
         getCollection('users', where('role', '==', 'trainer')),
+        getCollection('users', where('role', '==', 'student')),
       ])
       setTerms(t)
       setAllSubjects(s)
       setAllClasses(c)
       setAllTrainers(tr)
+      setAllStudents(stu)
       if (!isAdmin) {
         const a = await getAssignmentsByTrainer(myId)
         setMyAssignments(a)
@@ -714,7 +717,7 @@ export default function Participation() {
                   {filteredRecords.map((r) => (
                     <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
-                        {lookupName([], r.studentId) || r.studentId?.slice(0, 6) + '…'}
+                        {lookupName(allStudents, r.studentId, ['firstName', 'lastName'])}
                       </td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{lookupName(allSubjects, r.subjectId)}</td>
                       <td className="px-4 py-3 text-gray-500">{lookupName(allClasses, r.classId)}</td>
