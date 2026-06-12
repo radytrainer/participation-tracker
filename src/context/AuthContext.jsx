@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from '../firebase/config'
 import { getUserProfile } from '../firebase/auth'
 
@@ -14,6 +14,10 @@ export function AuthProvider({ children }) {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const p = await getUserProfile(firebaseUser.uid)
+        if (p?.disabled) {
+          await signOut(auth)
+          return
+        }
         setUser(firebaseUser)
         setProfile(p)
       } else {

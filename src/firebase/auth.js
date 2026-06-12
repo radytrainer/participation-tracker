@@ -50,6 +50,11 @@ export async function registerUser(email, password, userData) {
 
 export async function loginUser(email, password) {
   const credential = await signInWithEmailAndPassword(auth, email, password)
+  const snap = await getDoc(doc(db, 'users', credential.user.uid))
+  if (snap.exists() && snap.data().disabled) {
+    await signOut(auth)
+    throw new Error('This account has been disabled. Contact your administrator.')
+  }
   return credential.user
 }
 

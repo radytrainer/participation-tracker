@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Blue rounded background -->
+  <rect width="512" height="512" rx="96" fill="#1d4ed8"/>
+  <!-- Graduation cap (white, centered, scaled to ~260px) -->
+  <g transform="translate(256,256) scale(10.8) translate(-12,-12)" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+    <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+  </g>
+</svg>

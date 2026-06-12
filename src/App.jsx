@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import ProtectedRoute from './components/shared/ProtectedRoute'
+import InstallPWA from './components/shared/InstallPWA'
 import Layout from './components/layout/Layout'
 
 import Login from './pages/auth/Login'
@@ -20,6 +21,7 @@ import Trainers from './pages/trainer/Trainers'
 import StudentDashboard from './pages/student/Dashboard'
 import EvaluationGuide from './pages/shared/EvaluationGuide'
 import Backup from './pages/admin/Backup'
+import Users from './pages/admin/Users'
 
 export default function App() {
   return (
@@ -58,6 +60,7 @@ export default function App() {
               <Route path="trainers" element={<Trainers />} />
               <Route path="guide" element={<EvaluationGuide />} />
               <Route path="backup" element={<Backup />} />
+              <Route path="users" element={<Users />} />
             </Route>
 
             {/* Student */}
@@ -77,6 +80,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
+          <InstallPWA />
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>

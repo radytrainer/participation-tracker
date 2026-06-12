@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, BookOpen, ClipboardList,
   LogOut, GraduationCap, ShieldCheck,
-  CalendarDays, BookMarked, ChevronLeft, ChevronRight, HelpCircle, DatabaseBackup,
+  CalendarDays, BookMarked, ChevronLeft, ChevronRight, HelpCircle, DatabaseBackup, UserCog,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { logoutUser } from '../../firebase/auth'
@@ -18,6 +18,7 @@ const adminLinks = [
   { to: '/trainer/participation', icon: ClipboardList, label: 'Participation' },
   { divider: true },
   { to: '/trainer/trainers', icon: ShieldCheck, label: 'Trainers' },
+  { to: '/trainer/users', icon: UserCog, label: 'Users' },
   { to: '/trainer/guide', icon: HelpCircle, label: 'Evaluation Guide' },
   { to: '/trainer/backup', icon: DatabaseBackup, label: 'Data Backup' },
 ]
